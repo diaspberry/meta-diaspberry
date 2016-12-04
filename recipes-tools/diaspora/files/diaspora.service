@@ -1,0 +1,13 @@
+[Unit]
+Description=A privacy aware distributed social network
+#Wants=redis.service
+#Wants=postgresql.service
+
+[Service]
+User=diaspora
+Environment=RAILS_ENV=production DB=postgres
+WorkingDirectory=/home/diaspora
+ExecStart=/usr/bin/diaspora
+
+[Install]
+WantedBy=multi-user.target
