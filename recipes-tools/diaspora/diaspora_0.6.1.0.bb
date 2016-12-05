@@ -24,6 +24,8 @@ SRC_URI = "file://LICENSE \
   git://github.com/${PN}/${PN}.git;protocol=git;branch=master \
   "
 
+S = "${WORKDIR}"
+
 SRCREV = "b88f53a3d3fc608b726835437574fee0095ae69f"
 
 do_install() {
