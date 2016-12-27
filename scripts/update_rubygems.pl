@@ -128,10 +128,15 @@ while (<FH>) {
   # from the version number
   $gem =~ s/_/-/g;
 
-  system("mkdir -p $reciepe_folder/gem-$gem");
-  open(GH, '>', "$reciepe_folder/gem-$gem/gem-$gem\_$version.bb") or die $!;
-  print GH $gem_file_content;
-  close GH;
+  my $reciepe_file = "$reciepe_folder/gem-$gem/gem-$gem\_$version.bb";
+  unless (-e $reciepe_file) {
+    system("mkdir -p $reciepe_folder/gem-$gem");
+    open(GH, '>', $reciepe_file) or die $!;
+    print GH $gem_file_content;
+    close GH;
+  } else {
+    print "    $gem-$version already exists! Skipping..\n";
+  }
 
   print DDH "  gem-$gem (= $version) \\\n";
 }
