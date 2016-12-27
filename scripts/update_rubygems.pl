@@ -110,7 +110,7 @@ while (<FH>) {
     my $licmd5 = `md5sum $license_file |cut -d' ' -f1` or die $!;
     chomp($licmd5);
 
-    $license_file =~ s/$tmp_folder\/$gem-$version//;
+    $license_file =~ s/$tmp_folder\/$gem-$version\///;
     $gem_file_content =~ s/\{LICFILE\}/$license_file/g;
     $gem_file_content =~ s/\{LICMD5\}/$licmd5/g;
   }
