@@ -19,6 +19,12 @@
 #
 use strict;
 
+my $skip_groups = {
+  'test' => 1,
+  'development' => 1,
+  'mysql' => 1
+};
+
 my $tmp_folder = "/tmp";
 my $reciepe_folder = "recipes-rubygems";
 my $diaspora_dep_file = "recipes-core/diaspora/dependencies.inc";
@@ -41,12 +47,25 @@ PR = "r0"
 inherit rubygems
 EOT
 
+my $group_skip = 0;
 open (FH, '<', $ARGV[0]) or die $!;
 open (DDH, '>', $diaspora_dep_file) or die $!;
 print DDH "DEPENDS = \" \\\n";
 while (<FH>) {
   my $gemfile_line = $_;
   my ($gem, $version, $source) = (undef, undef, undef);
+
+  # skip all unnecessary groups
+  if ($gemfile_line =~ /^group\s+\:(\w+)/
+  && defined $skip_groups->{$1}) {
+    $group_skip = 1;
+  }
+  if ($group_skip) {
+    if ($gemfile_line =~ /^end/) {
+      $group_skip = 0;
+    }
+    next;
+  }
 
   # with version number
   if ($gemfile_line =~ /^\s*gem\s+"(.+?)",\s+"([0-9\.\w]+?)"/ig) {
