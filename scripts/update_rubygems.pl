@@ -50,7 +50,7 @@ EOT
 my $group_skip = 0;
 open (FH, '<', $ARGV[0]) or die $!;
 open (DDH, '>', $diaspora_dep_file) or die $!;
-print DDH "DEPENDS = \" \\\n";
+print DDH "RDEPENDS_\${PN} = \" \\\n";
 while (<FH>) {
   my $gemfile_line = $_;
   my ($gem, $version, $source) = (undef, undef, undef);
