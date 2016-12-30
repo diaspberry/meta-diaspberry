@@ -18,12 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 use strict;
-
-my $skip_groups = {
-  'test' => 1,
-  'development' => 1,
-  'mysql' => 1
-};
+use Data::Dumper;
 
 my $tmp_folder = "/tmp";
 my $reciepe_folder = "recipes-rubygems";
@@ -37,7 +32,7 @@ HOMEPAGE = "http://rubygems.org/gems/{GEM}"
 SECTION = "devel/ruby"
 LICENSE = "{LIC}"
 LIC_FILES_CHKSUM = "file://{LICFILE};md5={LICMD5}"
-{GEM_SRC}
+{GEM_SRC_TLD}
 
 SRC_URI[md5sum] = "{MD5}"
 SRC_URI[sha256sum] = "{SHA256}"
@@ -47,78 +42,63 @@ PR = "r0"
 inherit rubygems
 EOT
 
-my $group_skip = 0;
+
+my $specs = 0;
+my $lock = {};
 open (FH, '<', $ARGV[0]) or die $!;
+while(<FH>) {
+  my $line = $_;
+  if ($line =~ /^\s+specs:/) {
+    $specs = 1;
+  }
+  if ($specs && $line =~ /^\w+/) {
+    $specs = 0;
+  }
+
+  if ($specs) {
+    #      rails-dom-testing (~> 1.0, >= 1.0.5)
+    $line =~ /^\s+([^\s]+?)\s\((.+?)\)$/;
+    my ($name, $version) = ($1, $2);
+    push @{$lock->{$name}}, "$version";
+  }
+}
+close FH;
+
 open (DDH, '>', $diaspora_dep_file) or die $!;
 print DDH "RDEPENDS_\${PN} = \" \\\n";
-while (<FH>) {
-  my $gemfile_line = $_;
-  my ($gem, $version, $source) = (undef, undef, undef);
 
-  # skip all unnecessary groups
-  if ($gemfile_line =~ /^group\s+\:(\w+)/
-  && defined $skip_groups->{$1}) {
-    $group_skip = 1;
-  }
-  if ($group_skip) {
-    if ($gemfile_line =~ /^end/) {
-      $group_skip = 0;
-    }
-    next;
+for my $gem (keys %$lock) {
+  next if $gem =~ /^\s*$/;
+
+  print "[+] working on $gem ";
+  my $version_string = join(', ', @{$lock->{$gem}});
+  print "with '$version_string'\n";
+
+  my $source = undef;
+  if ($gem =~ /^rails-assets-/) {
+    $source = "http://rails-assets.org";
   }
 
-  # with version number
-  if ($gemfile_line =~ /^\s*gem\s+"(.+?)",\s+"([0-9\.\w]+?)"/ig) {
-    ($gem, $version) = ($1, $2);
-  }
-  # without version number
-  if ($gemfile_line =~ /^\s*gem\s+"(.+?)"/ig) {
-    ($gem, $version) = ($1, undef);
-  }
-  # with different source
-  if ($gemfile_line =~ /source:\s*"([^"]+?)"/ig) {
-    $source = $1;
-  } elsif ($gem =~ /^rails-assets-/) {
-    # incase it is a group
-    $source = "https://rails-assets.org";
-  }
-
-  next unless defined $gem;
-
-  print "[+] working on $gem $version\n";
-
+  my $version_opts = "-v '$version_string'";
   my $gem_file_content = $dummy_gem;
   $gem_file_content =~ s/\{GEM\}/$gem/g;
   if (defined $source) {
-    $gem_file_content =~ s/\{GEM_SRC\}/GEM_SRC = "$source\/gems"/g;
-  } else {
-    $gem_file_content =~ s/\{GEM_SRC\}//d;
-  }
-
-  my $version_opts = "-v $version";
-  unless (defined $version) {
-    $version = "*";
-    $version_opts = "";
-  }
-  if (defined $source) {
     $version_opts .= " -s $source";
+    $gem_file_content =~ s/\{GEM_SRC_TLD\}/GEM_SRC_TLD = "$source"/g;
+  } else {
+    $gem_file_content =~ s/\{GEM_SRC_TLD\}//d;
   }
 
-  # download only if not available locally
-  unless (-d "$tmp_folder/$gem-$version") {
-    system("cd $tmp_folder && \
-      gem fetch $gem $version_opts && \
-      gem unpack $gem-$version.gem");
-  }
+  my $fetch_result = `cd $tmp_folder && gem fetch $gem $version_opts`;
+  # e.g Fetching: sprockets-2.12.3.gem
+  my $version = undef;
+  if ($fetch_result =~ /Downloaded\s$gem\-(.*?)$/g) {
+    $version = $1;
+  } else { die "No version found: $!"; }
+  system("cd $tmp_folder && gem unpack $gem-$version.gem");
 
-  if ($version eq "*") {
-    $version = `cd $tmp_folder/$gem-[0-9]* && pwd` or die $!;
-    chomp($version);
-    $version =~ s/^.*-(\d+\.[\d\.]+)$/$1/g;
-    print "   New version is $version\n";
-  }
-
-  my $license_file = `find $tmp_folder/$gem-$version |grep -Ei 'license|copying' |head -n1` or warn $!;
+  my $license_file = `find $tmp_folder/$gem-$version |grep -Ei 'license|copying' |head -n1`
+    or warn "No license file found";
   chomp($license_file);
   if ($license_file eq "") {
     $gem_file_content =~ s/\{LIC\}/CLOSED/g;
@@ -147,18 +127,16 @@ while (<FH>) {
   # from the version number
   $gem =~ s/_/-/g;
 
+  print DDH "  gem-$gem (= $version) \\\n";
+
   my $reciepe_file = "$reciepe_folder/gem-$gem/gem-$gem\_$version.bb";
   unless (-e $reciepe_file) {
     system("mkdir -p $reciepe_folder/gem-$gem");
     open(GH, '>', $reciepe_file) or die $!;
     print GH $gem_file_content;
     close GH;
-  } else {
-    print "    $gem-$version already exists! Skipping..\n";
   }
-
-  print DDH "  gem-$gem (= $version) \\\n";
 }
+
 print DDH "  \"\n";
 close DDH;
-close FH;
